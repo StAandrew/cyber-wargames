@@ -33,11 +33,11 @@ class DefendingAgent(gym.Env):
         logger.debug("Ready to accept new connections")
         self.server_socket.listen(1)
         self.conn, self.addr = self.server_socket.accept()
-        logger.debug("Connection from: " + str(self.addr))
+        logger.debug("Accepted Connection from: " + str(self.addr))
 
         self.server_socket.listen(1)
         self.bg_conn, self.bg_addr = self.server_socket.accept()
-        logger.debug("BG connection from: " + str(self.addr))
+        logger.debug("Accepted BG connection from: " + str(self.addr))
 
     def step(self, action):
         self.step_num += 1
