@@ -1,15 +1,18 @@
-import gym
-import time, os
-from stable_baselines3 import A2C, PPO, DQN
-from env_def import NwDefAgent
+import os
 import pathlib
+import time
 
-env = NwDefAgent()
+import gym
+from stable_baselines3 import A2C, DQN, PPO
+
+from env_def import DefendingAgent
+from config import models_dir, log_dir
+
+env = DefendingAgent()
 env.reset()
 
 file_name = "400000"
 file_extention = ".zip"
-models_dir = "models"
 starts_with = "network-def-DQN-1648507699"
 
 found = False

@@ -8,20 +8,19 @@ from gym import envs, spaces
 from stable_baselines3.common.callbacks import BaseCallback
 
 from common import MyPacket
+from config import HOST, PORT, logger
 
 N_DISCRETE_ACTIONS = 2
 N_CHANNELS = 2
-HOST = socket.gethostname()
-PORT = 5432
 PACKETS_PER_ITERATION = 10
-DEBUG = False
 
 
-class NwDefAgent(gym.Env):
+class DefendingAgent(gym.Env):
     metadata = {"render.modes": ["human"]}
 
     def __init__(self):
-        super(NwDefAgent, self).__init__()
+        super(DefendingAgent, self).__init__()
+
         self.action_space = spaces.Discrete(N_DISCRETE_ACTIONS)
         # self.observation_space = spaces.Box(low=0, high=5,
         #         shape=(N_CHANNELS,), dtype=np.float32)
@@ -30,15 +29,13 @@ class NwDefAgent(gym.Env):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind((HOST, PORT))
         self.server_socket.settimeout(10)
-        self.server_socket.listen(1)
+        self.server_socket.listen(2)
         self.conn, self.addr = self.server_socket.accept()
-        if DEBUG:
-            print("Connection from: " + str(self.addr))
+        logger.debug("Connection from: " + str(self.addr))
 
     def step(self, action):
         self.step_num += 1
-        if DEBUG:
-            print(f"step {self.step_num}")
+        logger.debug(f"step {self.step_num}")
         """
         0 -> pass
         1 -> deny
@@ -81,34 +78,28 @@ class NwDefAgent(gym.Env):
             print("Exception when sending reward: ", e)
             exit(1)
         self.total_reward += reward
-        if DEBUG:
-            print("sent reward")
+        logger.debug("sent reward")
 
         # receive new packet
         try:
             recv_data = self.conn.recv(8196)
         except ConnectionResetError:
-            if DEBUG:
-                print("attacker is done")
+            logger.debug("attacker is done")
             info = {"finished": True}
             return [np.array(0), 0, False, info]
         except Exception as e:
-            if DEBUG:
-                print("Exception when receiving packet: ", e)
+            logger.debug("Exception when receiving packet: ", e)
             exit(1)
         if not recv_data:
-            if DEBUG:
-                print("EXCEPTION, finished")
+            logger.debug("EXCEPTION, finished")
             info = {"finished": True}
             return [np.array(0), 0, False, info]
         try:
             pkt = pickle.loads(recv_data)
         except Exception as e:
-            if DEBUG:
-                print("1 EXCEPTION ", e)
+            logger.debug("1 EXCEPTION ", e)
 
-        if DEBUG:
-            print("got packet")
+        logger.debug("received packet")
         receive_time = time.time_ns()
 
         # print("src_ip: ", pkt.src_ip)
@@ -121,8 +112,7 @@ class NwDefAgent(gym.Env):
 
     def reset(self):
         self.step_num = 0
-        if DEBUG:
-            print("reset")
+        logger.debug("reset")
 
         self.done = False
         self.total_reward = 0
@@ -130,33 +120,27 @@ class NwDefAgent(gym.Env):
         self.correct_pkts = 0
         self.incorrect_pkts = 0
 
-        if DEBUG:
-            print("waiting for packets")
+        logger.debug("waiting for packets")
         try:
             data = self.conn.recv(8196)  # 4096
         except ConnectionResetError:
-            if DEBUG:
-                print("attacker is done")
+            logger.debug("attacker is done")
             info = {"finished": True}
             return [np.array(0)]
         if not data:
-            if DEBUG:
-                print("attacker is done")
+            logger.debug("attacker is done")
             info = {"finished": True}
             return [np.array(0)]
 
-        if DEBUG:
-            print("pickle data: ", data)
+        logger.debug("pickle data: ", data)
 
         try:
             pkt = pickle.loads(data)
         except Exception as e:
-            if DEBUG:
-                print("2 EXCEPTION: ", e)
+            logger.debug("2 EXCEPTION: ", e)
             exit(1)
 
-        if DEBUG:
-            print("got packet")
+        logger.debug("got packet")
 
         observation = [pkt.src_ip]
         observation = np.array(observation)
@@ -165,7 +149,7 @@ class NwDefAgent(gym.Env):
         return observation
 
     def render(self):
-        print("---- episode ----")
+        logger.debug("---- episode ----")
         # print(self.pkt.str())
 
     def close(self):
@@ -183,8 +167,7 @@ class CustomCallback(BaseCallback):
         try:
             finished_bool = bool(self.locals["infos"][0].get("finished"))
             if finished_bool:
-                if DEBUG:
-                    print("training finished")
+                logger.debug("training finished")
                 continue_training = False
         except:
             raise Exception("Error in callback! No finished info found")

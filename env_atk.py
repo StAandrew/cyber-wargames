@@ -6,23 +6,22 @@ import time
 import gym
 import numpy as np
 from gym import spaces
-from common import MyPacket
 from stable_baselines3.common.callbacks import BaseCallback
 
+from common import MyPacket
+from config import HOST, PORT, logger
 
 N_DISCRETE_ACTIONS = 2
 N_DISCRETE_SPACES = 2
-ATK_HOST = socket.gethostname()
-ATK_PORT = 5432
 PACKETS_PER_ITERATION = 10
 DEBUG = False
 
 
-class NwAtkAgent(gym.Env):
+class AttackingAgent(gym.Env):
     metadata = {"render.modes": ["human"]}
 
     def __init__(self):
-        super(NwAtkAgent, self).__init__()
+        super(AttackingAgent, self).__init__()
         self.action_space = spaces.Discrete(N_DISCRETE_ACTIONS)
         self.observation_space = spaces.Box(
             low=-1, high=10, shape=(N_DISCRETE_SPACES,), dtype=np.float32
@@ -30,24 +29,20 @@ class NwAtkAgent(gym.Env):
 
         self.client_socket = socket.socket()
         self.client_socket.settimeout(10)
-        self.client_socket.connect((ATK_HOST, ATK_PORT))
-        if DEBUG:
-            print("Connected")
+        self.client_socket.connect((HOST, PORT))
+        logger.debug("Connected")
 
     def step(self, action):
-        if DEBUG:
-            print("---step---")
+        logger.debug("---step---")
 
         if self.training_finished:
-            if DEBUG:
-                print("training finished - beginning")
+            logger.debug("training finished - beginning")
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
 
         if random.random() > 0.5:
             bg_packet = getBackgroundPacket()
-            if DEBUG:
-                print("sent bg ", self.step_num)
+            logger.debug("sent bg ", self.step_num)
             self.step_num += 1
             recv_data = send_rcv_func(self.client_socket, bg_packet, self.rtt)
 
@@ -60,29 +55,23 @@ class NwAtkAgent(gym.Env):
         )
         self.past_rtt_list.append((time.time_ns() - sent_time) / 1000000000)
         self.rtt = np.average(self.past_rtt_list)
-
-        if DEBUG:
-            print("rtt: ", self.rtt)
-            print("sent atk ", self.step_num)
+        logger.debug("rtt: ", self.rtt)
+        logger.debug("sent atk ", self.step_num)
         self.step_num += 1
 
         if self.training_finished:
-            if DEBUG:
-                print("training finished - var")
+            logger.debug("training finished - var")
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
 
         try:
             recv_data = pickle.loads(recv_data)
         except EOFError:
-            if DEBUG:
-                print("training finished - EOFError")
+            logger.debug("training finished - EOFError")
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
         reward = -1 * np.int32((recv_data.get("reward")))
-
-        if DEBUG:
-            print("got reward: ", reward)
+        logger.debug("got reward: ", reward)
 
         if reward > 0:
             self.correct_pkts += 1
@@ -101,8 +90,7 @@ class NwAtkAgent(gym.Env):
         return observation, reward, self.done, info
 
     def reset(self):
-        if DEBUG:
-            print("---reset---")
+        logger.debug("---reset---")
         self.step_num = 1
         self.correct_pkts = 0
         self.incorrect_pkts = 0
@@ -118,9 +106,7 @@ class NwAtkAgent(gym.Env):
         )
         self.past_rtt_list.append((time.time_ns() - sent_time) / 1000000000)
         self.rtt = np.average(self.past_rtt_list)
-
-        if DEBUG:
-            print("rtt: ", self.rtt)
+        logger.debug("rtt: ", self.rtt)
 
         if self.training_finished:
             info = {"finished": True}
@@ -128,8 +114,7 @@ class NwAtkAgent(gym.Env):
 
         recv_data = pickle.loads(recv_data)
         reward = -1 * np.int32((recv_data.get("reward")))
-        if DEBUG:
-            print("got reward: ", reward)
+        logger.debug("got reward: ", reward)
 
         self.step_num += 1
         self.client_socket.settimeout(10)  # TODO need to change
@@ -138,10 +123,10 @@ class NwAtkAgent(gym.Env):
         return observation
 
     def render(self):
-        print("---- episode ----")
+        logger.debug("---- episode ----")
 
     def close(self):
-        print("close")
+        logger.debug("close")
         # self.client_socket.shutdown(socket.SHUT_RDWR)
         self.client_socket.close()
 
@@ -157,37 +142,31 @@ IP:
 def send_rcv_func(socket, packet, rtt):
     recv_response = False
     training_finished = False
-    if DEBUG:
-        attempts = 0
+    attempts = 0
     while not recv_response:
-        if DEBUG:
-            attempts += 1
-            print("  send_rcv_func: attempt ", attempts)
+        attempts += 1
+        logger.debug("  send_rcv_func: attempt ", attempts)
         # send random packet
         try:
             socket.send(pickle.dumps(packet))
         except BrokenPipeError as e:
-            if DEBUG:
-                print("  send_rcv_func: training finished on send", e)
+            logger.debug("  send_rcv_func: training finished on send", e)
             training_finished = True
             return "", training_finished
         except Exception as e:
-            print("  send_rcv_func: Exception! ", e)
+            logger.debug("  send_rcv_func: Exception! ", e)
             training_finished = True
             return "", training_finished
-        if DEBUG:
-            print("  send_rcv_func: packet sent")
+        logger.debug("  send_rcv_func: packet sent")
 
         # receive response
         socket.settimeout(rtt)
         try:
             recv_data = socket.recv(4096)
             recv_response = True
-            if DEBUG:
-                print("  send_rcv_func: response received")
+            logger.debug("  send_rcv_func: response received")
         except (EOFError, BrokenPipeError) as e:
-            if DEBUG:
-                print("  send_rcv_func: training finished on receive", e)
+            logger.debug("  send_rcv_func: training finished on receive", e)
             training_finished = True
             return recv_data, training_finished
         except Exception:
@@ -208,7 +187,7 @@ def getBackgroundPacket():
 # if __name__ == "__main__":
 #     client_socket = socket.socket()
 #     client_socket.connect((ATK_HOST, ATK_PORT))
-#     print("Connected")
+#     logger.debug("Connected")
 
 
 class CustomCallback(BaseCallback):
@@ -220,7 +199,7 @@ class CustomCallback(BaseCallback):
         try:
             finished_bool = bool(self.locals["infos"][0].get("finished"))
             if finished_bool:
-                print("training finished")
+                logger.debug("training finished")
                 continue_training = False
         except:
             raise Exception("Error in callback! No finished info found")

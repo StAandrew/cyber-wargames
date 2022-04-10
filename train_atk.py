@@ -1,18 +1,21 @@
+import os
+import time
+from pathlib import Path
+
 import gym
-import time, os
-from stable_baselines3 import PPO, DQN, DDPG
-from env_atk import CustomCallback, MyPacket
-from env_atk import NwAtkAgent
+from stable_baselines3 import DDPG, DQN, PPO
+
+from env_atk import CustomCallback, MyPacket, NwAtkAgent
+from config import models_dir, log_dir
 
 
 model_type = "DQN"
-models_dir = f"models/network-atk-{model_type}-{int(time.time())}"
-logdir = "logs"
+model_dir = Path(models_dir, f"network-atk-{model_type}-{int(time.time())}")
 
-if not os.path.exists(models_dir):
-    os.makedirs(models_dir)
-if not os.path.exists(logdir):
-    os.makedirs(logdir)
+if not os.path.exists(model_dir):
+    os.makedirs(model_dir)
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
 
 env = NwAtkAgent()
 timesteps = 200000
@@ -21,7 +24,7 @@ log_time = int(time.time())
 start_time = time.time()
 
 custom_callback = CustomCallback()
-model = DQN("MlpPolicy", env, verbose=0, tensorboard_log=logdir)
+model = DQN("MlpPolicy", env, verbose=0, tensorboard_log=log_dir)
 
 for i in range(1, int(timesteps / save_every_timesteps) + 1):
     model.learn(
@@ -30,7 +33,7 @@ for i in range(1, int(timesteps / save_every_timesteps) + 1):
         reset_num_timesteps=False,
         tb_log_name=f"network-atk-{model_type}-{log_time}",
     )
-    model.save(f"{models_dir}/{save_every_timesteps*i}")
+    model.save(Path(model_dir, save_every_timesteps * i))
 
 env.close()
 print("-----model training done------")

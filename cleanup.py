@@ -1,10 +1,9 @@
-import pathlib
 import os
+import pathlib
 import shutil
 
-models_dir = "models"
-log_dir = "logs"
-starts_with = "network"
+from config import models_dir, log_dir, starts_with
+
 
 for filename in os.listdir(models_dir):
     if filename.startswith(starts_with):

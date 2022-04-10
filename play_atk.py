@@ -1,15 +1,18 @@
-import gym
-import time, os
-from stable_baselines3 import A2C, PPO, DQN
-from env_atk import NwAtkAgent
+import os
 import pathlib
+import time
 
-env = NwAtkAgent()
+import gym
+from stable_baselines3 import A2C, DQN, PPO
+
+from env_atk import AttackingAgent
+from config import models_dir, log_dir
+
+env = AttackingAgent()
 env.reset()
 
 file_name = "200000"
 file_extention = ".zip"
-models_dir = "models"
 starts_with = "network-atk-DQN-1648507701"
 
 found = False

@@ -2,7 +2,7 @@
 ##Setup
 
 #### Repository URL
-[GitHub Repository](https://github.com/StAandrew)
+[GitHub Repository](https://github.com/StAandrew/cyber-wargames)
 
 #### About
 
