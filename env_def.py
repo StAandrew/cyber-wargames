@@ -29,9 +29,15 @@ class DefendingAgent(gym.Env):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind((HOST, PORT))
         self.server_socket.settimeout(10)
-        self.server_socket.listen(2)
+
+        logger.debug("Ready to accept new connections")
+        self.server_socket.listen(1)
         self.conn, self.addr = self.server_socket.accept()
         logger.debug("Connection from: " + str(self.addr))
+
+        self.server_socket.listen(1)
+        self.bg_conn, self.bg_addr = self.server_socket.accept()
+        logger.debug("BG connection from: " + str(self.addr))
 
     def step(self, action):
         self.step_num += 1
@@ -66,16 +72,17 @@ class DefendingAgent(gym.Env):
         else:
             self.done = False
 
-        # send reward
+        # send reward packet
         send_time = time.time()
         send_data = {"reward": reward}
         try:
             self.conn.send(pickle.dumps(send_data))
-        except BrokenPipeError:
+        except BrokenPipeError as e:
+            logger.error(f"Error when sending packet, episode finished: {e}")
             info = {"finished": True}
             return [np.array(0), 0, False, info]
         except Exception as e:
-            print("Exception when sending reward: ", e)
+            logger.critical(f"Critical error when sending packet: {e}")
             exit(1)
         self.total_reward += reward
         logger.debug("sent reward")
@@ -88,16 +95,16 @@ class DefendingAgent(gym.Env):
             info = {"finished": True}
             return [np.array(0), 0, False, info]
         except Exception as e:
-            logger.debug("Exception when receiving packet: ", e)
+            logger.critical(f"Critical error when receiving packet: {e}")
             exit(1)
         if not recv_data:
-            logger.debug("EXCEPTION, finished")
+            logger.error(f"Error when receiving packet, episode finished.")
             info = {"finished": True}
             return [np.array(0), 0, False, info]
         try:
             pkt = pickle.loads(recv_data)
         except Exception as e:
-            logger.debug("1 EXCEPTION ", e)
+            logger.error(f"Unexpected exception when loading new packet: {e}")
 
         logger.debug("received packet")
         receive_time = time.time_ns()
@@ -123,12 +130,12 @@ class DefendingAgent(gym.Env):
         logger.debug("waiting for packets")
         try:
             data = self.conn.recv(8196)  # 4096
-        except ConnectionResetError:
-            logger.debug("attacker is done")
+        except ConnectionResetError as e:
+            logger.debug("Attacker is done: {e}")
             info = {"finished": True}
             return [np.array(0)]
         if not data:
-            logger.debug("attacker is done")
+            logger.debug("Attacker is done. ")
             info = {"finished": True}
             return [np.array(0)]
 
@@ -137,7 +144,7 @@ class DefendingAgent(gym.Env):
         try:
             pkt = pickle.loads(data)
         except Exception as e:
-            logger.debug("2 EXCEPTION: ", e)
+            logger.debug(f"Unexpected exception when loading packet data: {e}")
             exit(1)
 
         logger.debug("got packet")
@@ -150,7 +157,7 @@ class DefendingAgent(gym.Env):
 
     def render(self):
         logger.debug("---- episode ----")
-        # print(self.pkt.str())
+        logger.debug(self.pkt.str())
 
     def close(self):
         pass
@@ -169,7 +176,8 @@ class CustomCallback(BaseCallback):
             if finished_bool:
                 logger.debug("training finished")
                 continue_training = False
-        except:
+        except Exception as e:
+            logger.error("Error in callback! No finished info found {e}")
             raise Exception("Error in callback! No finished info found")
         return continue_training
 

@@ -2,31 +2,33 @@ import os
 import time
 from pathlib import Path
 
-import gym
-from stable_baselines3 import DQN, PPO
+from stable_baselines3 import DQN
 
-from common import MyPacket
-from env_def import CustomCallback, NwDefAgent
-from config import models_dir, log_dir
+from env_def import CustomCallback, DefendingAgent
+from config import models_dir, log_dir, logger
 
+
+logger.info("Initialising")
 model_type = "DQN"
 model_dir = Path(models_dir, f"network-def-{model_type}-{int(time.time())}")
 
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
+    logger.debug("Model directory created")
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
+    logger.debug("Log directory created")
 
-timesteps = 400000
-save_every_timesteps = 10000
+timesteps = 40
+save_every_timesteps = 10
 log_time = int(time.time())
 start_time = time.time()
-env = NwDefAgent()
+
+env = DefendingAgent()
 custom_callback = CustomCallback()
-
 model = DQN("MlpPolicy", env, verbose=0, tensorboard_log=log_dir)
-# model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=log_dir)
 
+logger.info("Starting training")
 for i in range(1, int(timesteps / save_every_timesteps) + 1):
     model.learn(
         total_timesteps=save_every_timesteps,
@@ -34,10 +36,11 @@ for i in range(1, int(timesteps / save_every_timesteps) + 1):
         reset_num_timesteps=False,
         tb_log_name=f"network-def-{model_type}-{log_time}",
     )
+    logger.info(f"Saved {save_every_timesteps*i}")
     model.save(Path(model_dir, save_every_timesteps * i))
 
 env.close()
-print("-----model training done-----")
+logger.info("Training done")
 # time.sleep()
 
 # env = NwDefAgent()

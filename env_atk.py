@@ -8,8 +8,9 @@ import numpy as np
 from gym import spaces
 from stable_baselines3.common.callbacks import BaseCallback
 
-from common import MyPacket
+from common import MyPacket, send_and_receive
 from config import HOST, PORT, logger
+from bg_traffic import BackgroundTraffic
 
 N_DISCRETE_ACTIONS = 2
 N_DISCRETE_SPACES = 2
@@ -30,7 +31,10 @@ class AttackingAgent(gym.Env):
         self.client_socket = socket.socket()
         self.client_socket.settimeout(10)
         self.client_socket.connect((HOST, PORT))
-        logger.debug("Connected")
+        logger.debug("Attacker connected")
+
+        self.background_traffic = BackgroundTraffic()
+        logger.debug("Background connected")
 
     def step(self, action):
         logger.debug("---step---")
@@ -40,17 +44,11 @@ class AttackingAgent(gym.Env):
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
 
-        if random.random() > 0.5:
-            bg_packet = getBackgroundPacket()
-            logger.debug("sent bg ", self.step_num)
-            self.step_num += 1
-            recv_data = send_rcv_func(self.client_socket, bg_packet, self.rtt)
-
         atk_packet = getSampleAttackerPacket()
         atk_packet.src_ip = action
 
         sent_time = time.time_ns()
-        recv_data, self.training_finished = send_rcv_func(
+        recv_data, self.training_finished = send_and_receive(
             self.client_socket, atk_packet, self.rtt
         )
         self.past_rtt_list.append((time.time_ns() - sent_time) / 1000000000)
@@ -66,8 +64,8 @@ class AttackingAgent(gym.Env):
 
         try:
             recv_data = pickle.loads(recv_data)
-        except EOFError:
-            logger.debug("training finished - EOFError")
+        except EOFError as e:
+            logger.debug(f"Error when processing received packet, training finished: {e}")
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
         reward = -1 * np.int32((recv_data.get("reward")))
@@ -91,6 +89,8 @@ class AttackingAgent(gym.Env):
 
     def reset(self):
         logger.debug("---reset---")
+        self.background_traffic.reset()
+
         self.step_num = 1
         self.correct_pkts = 0
         self.incorrect_pkts = 0
@@ -101,7 +101,7 @@ class AttackingAgent(gym.Env):
 
         random_packet = getSampleAttackerPacket()
         sent_time = time.time_ns()
-        recv_data, self.training_finished = send_rcv_func(
+        recv_data, self.training_finished = send_and_receive(
             self.client_socket, random_packet, self.rtt
         )
         self.past_rtt_list.append((time.time_ns() - sent_time) / 1000000000)
@@ -109,6 +109,7 @@ class AttackingAgent(gym.Env):
         logger.debug("rtt: ", self.rtt)
 
         if self.training_finished:
+            logger.debug("training finished in reset")
             info = {"finished": True}
             return np.array([0, 0])
 
@@ -138,49 +139,8 @@ IP:
 1 -> attacker
 """
 
-
-def send_rcv_func(socket, packet, rtt):
-    recv_response = False
-    training_finished = False
-    attempts = 0
-    while not recv_response:
-        attempts += 1
-        logger.debug("  send_rcv_func: attempt ", attempts)
-        # send random packet
-        try:
-            socket.send(pickle.dumps(packet))
-        except BrokenPipeError as e:
-            logger.debug("  send_rcv_func: training finished on send", e)
-            training_finished = True
-            return "", training_finished
-        except Exception as e:
-            logger.debug("  send_rcv_func: Exception! ", e)
-            training_finished = True
-            return "", training_finished
-        logger.debug("  send_rcv_func: packet sent")
-
-        # receive response
-        socket.settimeout(rtt)
-        try:
-            recv_data = socket.recv(4096)
-            recv_response = True
-            logger.debug("  send_rcv_func: response received")
-        except (EOFError, BrokenPipeError) as e:
-            logger.debug("  send_rcv_func: training finished on receive", e)
-            training_finished = True
-            return recv_data, training_finished
-        except Exception:
-            pass
-    return recv_data, training_finished
-
-
 def getSampleAttackerPacket():
     pkt = MyPacket(size=4, src_ip=1, dst_ip=0, true_source=1)
-    return pkt
-
-
-def getBackgroundPacket():
-    pkt = MyPacket(size=4, src_ip=0, dst_ip=0, true_source=0)
     return pkt
 
 
