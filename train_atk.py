@@ -2,14 +2,14 @@ import os
 import time
 from pathlib import Path
 
-from stable_baselines3 import DDPG, DQN
+from stable_baselines3 import DDPG, DQN, TD3
 
 from env_atk import CustomCallback, AttackingAgent
 from config import models_dir, log_dir, logger, MAX_RETRIES, INITIAL_RTT
 
 
 logger.info("Initialising")
-model_type = "DQN"
+model_type = "TD3"
 model_dir = Path(models_dir, f"network-atk-{model_type}-{int(time.time())}")
 
 if not os.path.exists(model_dir):
@@ -19,14 +19,14 @@ if not os.path.exists(log_dir):
     os.makedirs(log_dir)
     logger.debug("Log directory created")
 
-timesteps = 8000
-save_every_timesteps = 8000
+timesteps = 100000
+save_every_timesteps = 1000
 log_time = int(time.time())
 start_time = time.time()
 
 env = AttackingAgent()
 custom_callback = CustomCallback()
-model = DDPG("MlpPolicy", env, verbose=0, tensorboard_log=log_dir)
+model = TD3("MlpPolicy", env, verbose=0, tensorboard_log=log_dir)
 
 logger.info("Starting training")
 for i in range(1, int(timesteps / save_every_timesteps) + 1):

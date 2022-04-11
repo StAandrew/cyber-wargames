@@ -16,7 +16,7 @@ from bg_traffic import BackgroundTraffic
 
 N_DISCRETE_ACTIONS = 2
 N_DISCRETE_SPACES = 2
-PACKETS_PER_ITERATION = 10
+PACKETS_PER_ITERATION = 15
 MY_IP = 2
 
 
@@ -44,33 +44,33 @@ class AttackingAgent(gym.Env):
     def step(self, action):
         logger.debug("---step---")
 
-        if self.episode_finished:
+        if self.training_finished:
             logger.debug("training finished - beginning")
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
 
         # logger.info(f"ACTION {action}")
-        logger.info(f"ACTION[0] {action[0]}")
-        logger.info(f"ACTION[1] {action[1]}")
+        logger.debug(f"ACTION[0] {action[0]}")
+        logger.debug(f"ACTION[1] {action[1]}")
 
         atk_packet = getSampleAttackerPacket()
         atk_packet.source_ip = floor(action[0])
 
         to_sleep = action[1]/10000
         time.sleep(to_sleep)
-        logger.info(f"to sleep: {to_sleep}")
+        logger.debug(f"to sleep: {to_sleep}")
 
         sent_time = time.time_ns()
-        recv_data, self.episode_finished = send_and_receive(
+        recv_data, self.training_finished = send_and_receive(
             self.client_socket, atk_packet, self.rtt, __name__
         )
         self.past_rtt_list.append((time.time_ns() - sent_time) / 1000000000)
         self.rtt = np.average(self.past_rtt_list)
         logger.debug(f"rtt: {self.rtt}")
-        logger.debug(f"sent atk {self.step_num}")
+        # logger.debug(f"sent atk {self.step_num}")
         self.step_num += 1
 
-        if self.episode_finished:
+        if self.training_finished:
             logger.debug("training finished - var")
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
@@ -89,9 +89,9 @@ class AttackingAgent(gym.Env):
         if reward > 0:
             self.correct_pkts += 1
         else:
-            self.incorrect_pkts -= 1
+            self.incorrect_pkts += 1
 
-        if self.correct_pkts + self.incorrect_pkts > PACKETS_PER_ITERATION:
+        if (self.correct_pkts + self.incorrect_pkts) > PACKETS_PER_ITERATION:
             self.done = True
         else:
             self.done = False
@@ -111,18 +111,18 @@ class AttackingAgent(gym.Env):
         self.done = False
         self.past_rtt_list = []
         self.rtt = INITIAL_RTT  # seconds
-        self.episode_finished = False
+        self.training_finished = False
 
         random_packet = getSampleAttackerPacket()
         sent_time = time.time_ns()
-        recv_data, self.episode_finished = send_and_receive(
+        recv_data, self.training_finished = send_and_receive(
             self.client_socket, random_packet, self.rtt, __name__
         )
         self.past_rtt_list.append((time.time_ns() - sent_time) / 1000000000)
         self.rtt = np.average(self.past_rtt_list)
         logger.debug(f"rtt: {self.rtt}")
 
-        if self.episode_finished:
+        if self.training_finished:
             logger.debug("episode finished in reset")
             info = {"finished": True}
             return np.array([0, 0])

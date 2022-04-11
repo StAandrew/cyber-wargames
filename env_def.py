@@ -6,13 +6,14 @@ import gym
 import numpy as np
 from gym import envs, spaces
 from stable_baselines3.common.callbacks import BaseCallback
+from socket import timeout
 
 from common import MyPacket
 from config import HOST, PORT, logger, PACKET_SIZE
 
 N_DISCRETE_ACTIONS = 2
 N_CHANNELS = 2
-PACKETS_PER_ITERATION = 10
+PACKETS_PER_ITERATION = 30
 MY_IP = 1
 
 
@@ -23,7 +24,7 @@ class DefendingAgent(gym.Env):
         super(DefendingAgent, self).__init__()
 
         self.action_space = spaces.Discrete(N_DISCRETE_ACTIONS)
-        self.observation_space = spaces.Box(low=0, high=10,
+        self.observation_space = spaces.Box(low=0, high=5000,
                 shape=(N_CHANNELS,), dtype=np.float32)
         # self.observation_space = spaces.Discrete(5)
 
@@ -37,7 +38,12 @@ class DefendingAgent(gym.Env):
 
     def step(self, action):
         self.step_num += 1
-        logger.debug(f"Step {self.step_num}")
+        if self.prev_pkt.true_source_ip == 3:
+            self.bg_pkts += 1
+        elif self.prev_pkt.true_source_ip == 2:
+            self.atk_pkts += 1
+        atk_def_ratio = 100* self.atk_pkts / (self.atk_pkts + self.bg_pkts)
+        logger.debug(f"Step {self.step_num}. Atk packets {atk_def_ratio:.0f}%")
         """
         0 -> pass
         1 -> deny
@@ -63,7 +69,7 @@ class DefendingAgent(gym.Env):
             reward = -1
             self.incorrect_pkts += 1
 
-        if self.correct_pkts + self.incorrect_pkts > PACKETS_PER_ITERATION:
+        if (self.correct_pkts + self.incorrect_pkts) > PACKETS_PER_ITERATION:
             self.done = True
         else:
             self.done = False
@@ -83,7 +89,7 @@ class DefendingAgent(gym.Env):
         try:
             self.socket.send(send_data)
         except BrokenPipeError as e:
-            logger.error(f"Error when sending packet, episode finished: {e}")
+            logger.error(f"Error when sending packet, training finished: {e}")
             info = {"finished": True}
             return [np.array(0), 0, False, info]
         except Exception as e:
@@ -96,21 +102,21 @@ class DefendingAgent(gym.Env):
         # receive new packet
         try:
             recv_data = self.socket.recv(PACKET_SIZE)
-            self.time_delta = time.time() - self.start_time
+            self.time_delta = 10000 * round((time.time() - self.start_time), 4)
             logger.debug(f"time delta: {self.time_delta}")
         except ConnectionResetError:
             logger.debug("Attacker is done")
             info = {"finished": True}
             return [np.array(0), 0, False, info]
-        except TimeoutError as e:
-            logger.error(f"Timed out when receiving packet, episode finished.")
+        except (TimeoutError, timeout) as e:
+            logger.error(f"Timed out when receiving packet, training finished.")
             info = {"finished": True}
             return [np.array(0), 0, False, info]
         except Exception as e:
             logger.critical(f"Critical error when receiving packet: {e}")
             exit(1)
         if not recv_data:
-            logger.error(f"Error when receiving packet, episode finished.")
+            logger.error(f"Error when receiving packet, training finished.")
             info = {"finished": True}
             return [np.array(0), 0, False, info]
         try:
@@ -138,11 +144,14 @@ class DefendingAgent(gym.Env):
         self.correct_pkts = 0
         self.incorrect_pkts = 0
 
+        self.atk_pkts = 0
+        self.bg_pkts = 0
+
         self.start_time = time.time()
         logger.debug("Waiting for packets")
         try:
             data = self.socket.recv(PACKET_SIZE)
-            self.time_delta = time.time() - self.start_time
+            self.time_delta = 10000* round((time.time() - self.start_time), 4)
             logger.debug(f"time delta: {self.time_delta}")
         except ConnectionResetError as e:
             logger.debug("Attacker is done: {e}")

@@ -21,8 +21,8 @@ if not os.path.exists(log_dir):
     os.makedirs(log_dir)
     logger.debug("Log directory created")
 
-timesteps = 4000
-save_every_timesteps = 1000
+timesteps = 100000
+save_every_timesteps = 10000
 log_time = int(time.time())
 start_time = time.time()
 

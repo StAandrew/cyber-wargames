@@ -67,6 +67,7 @@ class Router:
                             dest_conn = self.connections[destination_ip][0]
                             dest_conn.send(data_raw)
                         except TypeError as e:
+                            logger.error(self.connections[destination_ip])
                             logger.error(
                                 f"Packet from ip {source_ip} was not forwarded, host not found with ip {destination_ip}"
                             )
