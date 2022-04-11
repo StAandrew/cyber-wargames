@@ -8,7 +8,7 @@ from gym import envs, spaces
 from stable_baselines3.common.callbacks import BaseCallback
 
 from common import MyPacket
-from config import HOST, PORT, logger
+from config import HOST, PORT, logger, PACKET_SIZE
 
 N_DISCRETE_ACTIONS = 2
 N_CHANNELS = 2
@@ -73,11 +73,13 @@ class DefendingAgent(gym.Env):
         # feedback_packet = MyPacket(0, 0, 0, MY_IP, self.prev_pkt.true_source_ip)
         # feedback_packet.data = {"reward": reward}
         # send_data = pickle.dumps(feedback_packet)
-        send_data = pickle.dumps({
-            "reward": reward,
-            "true_source_ip": MY_IP,
-            "true_destination_ip": self.prev_pkt.true_source_ip,
-        })
+        send_data = pickle.dumps(
+            {
+                "reward": reward,
+                "true_source_ip": MY_IP,
+                "true_destination_ip": self.prev_pkt.true_source_ip,
+            }
+        )
         try:
             self.socket.send(send_data)
         except BrokenPipeError as e:
@@ -92,9 +94,13 @@ class DefendingAgent(gym.Env):
 
         # receive new packet
         try:
-            recv_data = self.socket.recv(8196)
+            recv_data = self.socket.recv(PACKET_SIZE)
         except ConnectionResetError:
             logger.debug("Attacker is done")
+            info = {"finished": True}
+            return [np.array(0), 0, False, info]
+        except TimeoutError as e:
+            logger.error(f"Timed out when receiving packet, episode finished.")
             info = {"finished": True}
             return [np.array(0), 0, False, info]
         except Exception as e:
@@ -132,7 +138,7 @@ class DefendingAgent(gym.Env):
 
         logger.debug("Waiting for packets")
         try:
-            data = self.socket.recv(8196)  # 4096
+            data = self.socket.recv(PACKET_SIZE)
         except ConnectionResetError as e:
             logger.debug("Attacker is done: {e}")
             info = {"finished": True}

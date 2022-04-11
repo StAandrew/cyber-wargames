@@ -24,7 +24,7 @@ class BackgroundTraffic:
     def send(self):
         self.num += 1
         # delay_list = [0.10, 0.50, 0.100, 0.500]
-        delay_list = [0.500]
+        delay_list = [0.010]
         time.sleep(random.choice(delay_list))
         bg_packet = MyPacket(
             size=4,
@@ -51,7 +51,9 @@ class BackgroundTraffic:
         logger.debug("Reset")
         self.num = 0
         self.past_rtt_list = []
-        self.rtt = INITIAL_RTT  # seconds. Large rtt time, not to owherwhelm the receiver
+        self.rtt = (
+            INITIAL_RTT  # seconds. Large rtt time, not to owherwhelm the receiver
+        )
         self._is_running = True
 
     def run(self):

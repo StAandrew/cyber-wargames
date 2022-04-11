@@ -8,7 +8,10 @@ PORT = 5432
 
 PACKET_SIZE = 8196
 
-INITIAL_RTT = 1
+INITIAL_RTT = 0.01  # seconds
+MAX_RETRIES = 10  # times
+
+timeout_multiplier = 2
 
 models_dir = "models"
 log_dir = "logs"
@@ -25,5 +28,3 @@ logger.setLevel(logging.DEBUG)
 # formatter    = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
 # file_handler.setFormatter(formatter)
 # logger.addHandler(file_handler)
-
-timeout_multiplier = 1.1

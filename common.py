@@ -1,8 +1,9 @@
 import random
 import pickle
 from socket import timeout
+from math import floor
 
-from config import timeout_multiplier, logger
+from config import timeout_multiplier, logger, MAX_RETRIES
 
 """
 size - packet size in bits
@@ -47,7 +48,7 @@ class MyPacket:
 """
 
 
-def send_and_receive(socket, packet, rtt, source_file, max_attempts=10):
+def send_and_receive(socket, packet, rtt, source_file, max_attempts=MAX_RETRIES):
     recv_response = False
     episode_finished = False
     num = 0
@@ -73,7 +74,12 @@ def send_and_receive(socket, packet, rtt, source_file, max_attempts=10):
 
         # wait and receive response
         try:
-            socket.settimeout(rtt)
+            if num < floor(MAX_RETRIES/2):
+                to_wait = rtt*num
+            else:
+                to_wait = (0.1 + rtt) * num
+            logger.debug(f"timeout set to {to_wait}")
+            socket.settimeout(to_wait)
             recv_data = socket.recv(4096)
             recv_response = True
             logger.debug(f"  {source_file}: response received")
@@ -85,8 +91,10 @@ def send_and_receive(socket, packet, rtt, source_file, max_attempts=10):
             pass
         except Exception as e:
             logger.error(f"  {source_file}: Unexpected error when receiving: {e}")
-        
+
         if num == max_attempts:
-            logger.debug("Reached max connection attempts, marking episode as finished.")
+            logger.debug(
+                "Reached max connection attempts, marking episode as finished."
+            )
             episode_finished = True
     return recv_data, episode_finished
