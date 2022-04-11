@@ -1,11 +1,13 @@
 import os
 import time
 from pathlib import Path
+import threading
 
 from stable_baselines3 import DQN
 
 from env_def import CustomCallback, DefendingAgent
 from config import models_dir, log_dir, logger
+from bg_traffic import BackgroundTraffic
 
 
 logger.info("Initialising")
@@ -24,6 +26,10 @@ save_every_timesteps = 10
 log_time = int(time.time())
 start_time = time.time()
 
+background_traffic = BackgroundTraffic()
+background_traffic.reset()
+background_traffic_thread = threading.Thread(target=background_traffic.run, args=()).start()
+
 env = DefendingAgent()
 custom_callback = CustomCallback()
 model = DQN("MlpPolicy", env, verbose=0, tensorboard_log=log_dir)
@@ -37,8 +43,9 @@ for i in range(1, int(timesteps / save_every_timesteps) + 1):
         tb_log_name=f"network-def-{model_type}-{log_time}",
     )
     logger.info(f"Saved {save_every_timesteps*i}")
-    model.save(Path(model_dir, save_every_timesteps * i))
+    model.save(Path(model_dir, str(save_every_timesteps * i)))
 
+background_traffic.close()
 env.close()
 logger.info("Training done")
 # time.sleep()

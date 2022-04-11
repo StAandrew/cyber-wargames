@@ -1,7 +1,8 @@
 import random
 import pickle
+from socket import timeout
 
-from config import timeout_multiplier
+from config import timeout_multiplier, logger
 
 """
 size - packet size in bits
@@ -11,13 +12,16 @@ data - random data of packet
 
 
 class MyPacket:
-    def __init__(self, size, src_ip, dst_ip, true_source):
+    def __init__(
+        self, size, source_ip, destination_ip, true_source_ip, true_destination_ip
+    ):
         self.size = size
-        self.src_ip = src_ip
-        self.dst_ip = dst_ip
+        self.source_ip = source_ip
+        self.destination_ip = destination_ip
+        self.true_source_ip = true_source_ip
+        self.true_destination_ip = true_destination_ip
         self.data = 0
-        self.fill_random()
-        self.true_source = true_source
+        # self.fill_random()
 
     def fill_random(self):
         for _ in range(self.size):
@@ -26,9 +30,10 @@ class MyPacket:
     def str(self):
         str_info = f"--- Packet ---\n"
         str_info += f"size: {self.size}\n"
-        str_info += f"src: {self.src_ip}\n"
-        str_info += f"dst: {self.dst_ip}\n"
-        str_info += f"true source: {self.true_source}\n"
+        str_info += f"src: {self.source_ip}\n"
+        str_info += f"dst: {self.destination_ip}\n"
+        str_info += f"true source: {self.true_source_ip}\n"
+        str_info += f"true destination: {self.true_destination_ip}\n"
         str_info += "\n"
         return str_info
 
@@ -40,41 +45,48 @@ class MyPacket:
    send the packet again.
 4. If ran into an error, mark episode as finished and return empty.
 """
-def send_and_receive(logger, socket, packet, rtt, max_attempts = 10):
+
+
+def send_and_receive(socket, packet, rtt, source_file, max_attempts=10):
     recv_response = False
     episode_finished = False
     num = 0
     rtt = rtt * timeout_multiplier
+    recv_data = b""
 
     while not recv_response and num < max_attempts:
         num += 1
-        logger.debug(f"  send_rcv_func: attempt {num}")
+        logger.debug(f"  {source_file}: attempt {num}")
 
         # send the packet
         try:
             socket.send(pickle.dumps(packet))
-        except BrokenPipeError as e:
-            logger.debug(f"  send_rcv_func: episode finished on send: {e}")
+        except (BrokenPipeError, IOError) as e:
+            logger.debug(f"  {source_file}: episode finished on send: {e}")
             episode_finished = True
             return "", episode_finished
         except Exception as e:
-            logger.error("  send_rcv_func: Unexpected error when sending: {e}")
+            logger.error(f"  {source_file}: Unexpected error when sending: {e}")
             episode_finished = True
             return "", episode_finished
-        logger.debug("  send_rcv_func: packet sent")
+        logger.debug(f"  {source_file}: packet sent")
 
         # wait and receive response
-        socket.settimeout(rtt)
         try:
+            socket.settimeout(rtt)
             recv_data = socket.recv(4096)
             recv_response = True
-            logger.debug("  send_rcv_func: response received")
+            logger.debug(f"  {source_file}: response received")
         except (EOFError, BrokenPipeError) as e:
-            logger.debug("  send_rcv_func: episode finished on receive: {e}")
+            logger.debug(f"  {source_file}: episode finished on receive: {e}")
             episode_finished = True
             return recv_data, episode_finished
-        except TimeoutError:   # exception expected if no response
+        except (TimeoutError, timeout):  # exception expected if no response
             pass
         except Exception as e:
-            logger.error(f"  send_rcv_func: Unexpected error when receiving: {e}")
+            logger.error(f"  {source_file}: Unexpected error when receiving: {e}")
+        
+        if num == max_attempts:
+            logger.debug("Reached max connection attempts, marking episode as finished.")
+            episode_finished = True
     return recv_data, episode_finished

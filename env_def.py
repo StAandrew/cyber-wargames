@@ -13,6 +13,7 @@ from config import HOST, PORT, logger
 N_DISCRETE_ACTIONS = 2
 N_CHANNELS = 2
 PACKETS_PER_ITERATION = 10
+MY_IP = 1
 
 
 class DefendingAgent(gym.Env):
@@ -26,44 +27,39 @@ class DefendingAgent(gym.Env):
         #         shape=(N_CHANNELS,), dtype=np.float32)
         self.observation_space = spaces.Discrete(5)
 
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind((HOST, PORT))
-        self.server_socket.settimeout(10)
-
-        logger.debug("Ready to accept new connections")
-        self.server_socket.listen(1)
-        self.conn, self.addr = self.server_socket.accept()
-        logger.debug("Accepted Connection from: " + str(self.addr))
-
-        self.server_socket.listen(1)
-        self.bg_conn, self.bg_addr = self.server_socket.accept()
-        logger.debug("Accepted BG connection from: " + str(self.addr))
+        self.socket = socket.socket()
+        self.socket.settimeout(10)
+        self.socket.connect((HOST, PORT))
+        self.socket.send(
+            pickle.dumps(MyPacket(0, 0, 0, true_source_ip=MY_IP, true_destination_ip=0))
+        )
+        logger.debug("Defender connected")
 
     def step(self, action):
         self.step_num += 1
-        logger.debug(f"step {self.step_num}")
+        logger.debug(f"Step {self.step_num}")
         """
         0 -> pass
         1 -> deny
         """
         if action == 0:
-            self.prev_pkt.dst_ip = 4
+            self.prev_pkt.destination_ip = 10
             # self.accepted_pkts.append(pkt)
         elif action == 1:
-            self.prev_pkt.dst_ip = 5
+            self.prev_pkt.destination_ip = 11
             # self.discarded_pkts.append(pkt)
 
         reward = 0
-        if self.prev_pkt.true_source == 0 and action == 0:  # bg, pass
+        if self.prev_pkt.true_source_ip == 3 and action == 0:  # bg, pass
             reward = 1
             self.correct_pkts += 1
-        elif self.prev_pkt.true_source == 1 and action == 1:  # atk, discard
+        elif self.prev_pkt.true_source_ip == 2 and action == 1:  # atk, discard
             reward = 1
             self.correct_pkts += 1
-        elif self.prev_pkt.true_source == 0 and action == 1:  # bg, discard
+        elif self.prev_pkt.true_source_ip == 3 and action == 1:  # bg, discard
             reward = -1
             self.incorrect_pkts += 1
-        elif self.prev_pkt.true_source == 1 and action == 0:  # atk, pass
+        elif self.prev_pkt.true_source_ip == 2 and action == 0:  # atk, pass
             reward = -1
             self.incorrect_pkts += 1
 
@@ -74,9 +70,16 @@ class DefendingAgent(gym.Env):
 
         # send reward packet
         send_time = time.time()
-        send_data = {"reward": reward}
+        # feedback_packet = MyPacket(0, 0, 0, MY_IP, self.prev_pkt.true_source_ip)
+        # feedback_packet.data = {"reward": reward}
+        # send_data = pickle.dumps(feedback_packet)
+        send_data = pickle.dumps({
+            "reward": reward,
+            "true_source_ip": MY_IP,
+            "true_destination_ip": self.prev_pkt.true_source_ip,
+        })
         try:
-            self.conn.send(pickle.dumps(send_data))
+            self.socket.send(send_data)
         except BrokenPipeError as e:
             logger.error(f"Error when sending packet, episode finished: {e}")
             info = {"finished": True}
@@ -89,9 +92,9 @@ class DefendingAgent(gym.Env):
 
         # receive new packet
         try:
-            recv_data = self.conn.recv(8196)
+            recv_data = self.socket.recv(8196)
         except ConnectionResetError:
-            logger.debug("attacker is done")
+            logger.debug("Attacker is done")
             info = {"finished": True}
             return [np.array(0), 0, False, info]
         except Exception as e:
@@ -106,11 +109,11 @@ class DefendingAgent(gym.Env):
         except Exception as e:
             logger.error(f"Unexpected exception when loading new packet: {e}")
 
-        logger.debug("received packet")
+        logger.debug("Received packet")
         receive_time = time.time_ns()
 
         # print("src_ip: ", pkt.src_ip)
-        observation = [pkt.src_ip]
+        observation = [pkt.source_ip]
         observation = np.array(observation)
         info = {"finished": False}
 
@@ -119,7 +122,7 @@ class DefendingAgent(gym.Env):
 
     def reset(self):
         self.step_num = 0
-        logger.debug("reset")
+        logger.debug("Reset")
 
         self.done = False
         self.total_reward = 0
@@ -127,19 +130,17 @@ class DefendingAgent(gym.Env):
         self.correct_pkts = 0
         self.incorrect_pkts = 0
 
-        logger.debug("waiting for packets")
+        logger.debug("Waiting for packets")
         try:
-            data = self.conn.recv(8196)  # 4096
+            data = self.socket.recv(8196)  # 4096
         except ConnectionResetError as e:
             logger.debug("Attacker is done: {e}")
             info = {"finished": True}
             return [np.array(0)]
         if not data:
-            logger.debug("Attacker is done. ")
+            logger.debug("Attacker is done. No data.")
             info = {"finished": True}
             return [np.array(0)]
-
-        logger.debug("pickle data: ", data)
 
         try:
             pkt = pickle.loads(data)
@@ -147,9 +148,9 @@ class DefendingAgent(gym.Env):
             logger.debug(f"Unexpected exception when loading packet data: {e}")
             exit(1)
 
-        logger.debug("got packet")
+        logger.debug("Got packet")
 
-        observation = [pkt.src_ip]
+        observation = [pkt.source_ip]
         observation = np.array(observation)
 
         self.prev_pkt = pkt
@@ -157,12 +158,12 @@ class DefendingAgent(gym.Env):
 
     def render(self):
         logger.debug("---- episode ----")
-        logger.debug(self.pkt.str())
+        # logger.debug(self.pkt.str())
 
     def close(self):
         pass
         # self.server_socket.shutdown(socket.SHUT_RDWR)
-        self.server_socket.close()
+        self.socket.close()
 
 
 class CustomCallback(BaseCallback):

@@ -2,6 +2,7 @@ import pickle
 import random
 import socket
 import time
+import threading
 
 import gym
 import numpy as np
@@ -9,13 +10,13 @@ from gym import spaces
 from stable_baselines3.common.callbacks import BaseCallback
 
 from common import MyPacket, send_and_receive
-from config import HOST, PORT, logger
+from config import HOST, PORT, logger, INITIAL_RTT
 from bg_traffic import BackgroundTraffic
 
 N_DISCRETE_ACTIONS = 2
 N_DISCRETE_SPACES = 2
 PACKETS_PER_ITERATION = 10
-DEBUG = False
+MY_IP = 2
 
 
 class AttackingAgent(gym.Env):
@@ -31,33 +32,33 @@ class AttackingAgent(gym.Env):
         self.client_socket = socket.socket()
         self.client_socket.settimeout(10)
         self.client_socket.connect((HOST, PORT))
+        self.client_socket.send(
+            pickle.dumps(MyPacket(0, 0, 0, true_source_ip=MY_IP, true_destination_ip=0))
+        )
         logger.debug("Attacker connected")
-
-        self.background_traffic = BackgroundTraffic()
-        logger.debug("Background connected")
 
     def step(self, action):
         logger.debug("---step---")
 
-        if self.training_finished:
+        if self.episode_finished:
             logger.debug("training finished - beginning")
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
 
         atk_packet = getSampleAttackerPacket()
-        atk_packet.src_ip = action
+        atk_packet.source_ip = action
 
         sent_time = time.time_ns()
-        recv_data, self.training_finished = send_and_receive(
-            self.client_socket, atk_packet, self.rtt
+        recv_data, self.episode_finished = send_and_receive(
+            self.client_socket, atk_packet, self.rtt, __name__
         )
         self.past_rtt_list.append((time.time_ns() - sent_time) / 1000000000)
         self.rtt = np.average(self.past_rtt_list)
-        logger.debug("rtt: ", self.rtt)
-        logger.debug("sent atk ", self.step_num)
+        logger.debug(f"rtt: {self.rtt}")
+        logger.debug(f"sent atk {self.step_num}")
         self.step_num += 1
 
-        if self.training_finished:
+        if self.episode_finished:
             logger.debug("training finished - var")
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
@@ -65,11 +66,13 @@ class AttackingAgent(gym.Env):
         try:
             recv_data = pickle.loads(recv_data)
         except EOFError as e:
-            logger.debug(f"Error when processing received packet, training finished: {e}")
+            logger.debug(
+                f"Error when processing received packet, training finished: {e}"
+            )
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
         reward = -1 * np.int32((recv_data.get("reward")))
-        logger.debug("got reward: ", reward)
+        logger.debug(f"got reward: {reward}")
 
         if reward > 0:
             self.correct_pkts += 1
@@ -81,7 +84,7 @@ class AttackingAgent(gym.Env):
         else:
             self.done = False
 
-        observation = [reward, atk_packet.src_ip]
+        observation = [reward, atk_packet.source_ip]
         observation = np.array(observation, dtype=np.float32)
         info = {"finished": False}
 
@@ -89,37 +92,36 @@ class AttackingAgent(gym.Env):
 
     def reset(self):
         logger.debug("---reset---")
-        self.background_traffic.reset()
 
         self.step_num = 1
         self.correct_pkts = 0
         self.incorrect_pkts = 0
         self.done = False
         self.past_rtt_list = []
-        self.rtt = 0.1  # seconds
-        self.training_finished = False
+        self.rtt = INITIAL_RTT  # seconds
+        self.episode_finished = False
 
         random_packet = getSampleAttackerPacket()
         sent_time = time.time_ns()
-        recv_data, self.training_finished = send_and_receive(
-            self.client_socket, random_packet, self.rtt
+        recv_data, self.episode_finished = send_and_receive(
+            self.client_socket, random_packet, self.rtt, __name__
         )
         self.past_rtt_list.append((time.time_ns() - sent_time) / 1000000000)
         self.rtt = np.average(self.past_rtt_list)
-        logger.debug("rtt: ", self.rtt)
+        logger.debug(f"rtt: {self.rtt}")
 
-        if self.training_finished:
-            logger.debug("training finished in reset")
+        if self.episode_finished:
+            logger.debug("episode finished in reset")
             info = {"finished": True}
             return np.array([0, 0])
 
         recv_data = pickle.loads(recv_data)
         reward = -1 * np.int32((recv_data.get("reward")))
-        logger.debug("got reward: ", reward)
+        logger.debug(f"got reward: {reward}")
 
         self.step_num += 1
         self.client_socket.settimeout(10)  # TODO need to change
-        observation = [reward, random_packet.src_ip]
+        observation = [reward, random_packet.source_ip]
         observation = np.array(observation, dtype=np.float32)
         return observation
 
@@ -132,15 +134,10 @@ class AttackingAgent(gym.Env):
         self.client_socket.close()
 
 
-"""
-IP:
- -> defender
-0 -> background
-1 -> attacker
-"""
-
 def getSampleAttackerPacket():
-    pkt = MyPacket(size=4, src_ip=1, dst_ip=0, true_source=1)
+    pkt = MyPacket(
+        size=4, source_ip=2, destination_ip=1, true_source_ip=2, true_destination_ip=1
+    )
     return pkt
 
 
@@ -159,8 +156,9 @@ class CustomCallback(BaseCallback):
         try:
             finished_bool = bool(self.locals["infos"][0].get("finished"))
             if finished_bool:
-                logger.debug("training finished")
+                logger.debug("episode finished")
                 continue_training = False
-        except:
+        except Exception as e:
+            logger.critical(f"Critical callback exception: {e}")
             raise Exception("Error in callback! No finished info found")
         return continue_training

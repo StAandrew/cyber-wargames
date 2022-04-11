@@ -37,7 +37,7 @@ for i in range(1, int(timesteps / save_every_timesteps) + 1):
         tb_log_name=f"network-atk-{model_type}-{log_time}",
     )
     logger.info(f"Saved {save_every_timesteps*i}")
-    model.save(Path(model_dir, save_every_timesteps * i))
+    model.save(Path(model_dir, str(save_every_timesteps * i)))
 
 env.close()
 logger.info("Training done")
