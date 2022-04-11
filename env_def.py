@@ -13,7 +13,7 @@ from config import HOST, PORT, logger, PACKET_SIZE
 
 N_DISCRETE_ACTIONS = 2
 N_CHANNELS = 2
-PACKETS_PER_ITERATION = 30
+PACKETS_PER_ITERATION = 300
 MY_IP = 1
 
 
@@ -25,7 +25,7 @@ class DefendingAgent(gym.Env):
 
         self.action_space = spaces.Discrete(N_DISCRETE_ACTIONS)
         self.observation_space = spaces.Box(low=0, high=5000,
-                shape=(N_CHANNELS,), dtype=np.float32)
+                shape=(N_CHANNELS,), dtype=np.int32)
         # self.observation_space = spaces.Discrete(5)
 
         self.socket = socket.socket()
@@ -37,6 +37,9 @@ class DefendingAgent(gym.Env):
         logger.debug("Defender connected")
 
     def step(self, action):
+        if bool(self.info["finished"]):
+            return [np.array(0), 0, False, self.info]
+
         self.step_num += 1
         if self.prev_pkt.true_source_ip == 3:
             self.bg_pkts += 1
@@ -90,8 +93,8 @@ class DefendingAgent(gym.Env):
             self.socket.send(send_data)
         except BrokenPipeError as e:
             logger.error(f"Error when sending packet, training finished: {e}")
-            info = {"finished": True}
-            return [np.array(0), 0, False, info]
+            self.info = {"finished": True}
+            return [np.array(0), 0, False, self.info]
         except Exception as e:
             logger.critical(f"Critical error when sending packet: {e}")
             exit(1)
@@ -106,39 +109,48 @@ class DefendingAgent(gym.Env):
             logger.debug(f"time delta: {self.time_delta}")
         except ConnectionResetError:
             logger.debug("Attacker is done")
-            info = {"finished": True}
-            return [np.array(0), 0, False, info]
+            self.info = {"finished": True}
+            return [np.array(0), 0, False, self.info]
         except (TimeoutError, timeout) as e:
-            logger.error(f"Timed out when receiving packet, training finished.")
-            info = {"finished": True}
-            return [np.array(0), 0, False, info]
+            logger.error(f"Timed out when receiving packet, training finished.--------------------------------------")
+            self.info = {"finished": True}
+            return [np.array(0), 0, False, self.info]
         except Exception as e:
             logger.critical(f"Critical error when receiving packet: {e}")
             exit(1)
         if not recv_data:
             logger.error(f"Error when receiving packet, training finished.")
-            info = {"finished": True}
-            return [np.array(0), 0, False, info]
+            self.info = {"finished": True}
+            return [np.array(0), 0, False, self.info]
         try:
             pkt = pickle.loads(recv_data)
         except Exception as e:
             logger.error(f"Unexpected exception when loading new packet: {e}")
 
-        logger.debug("Received packet")
-
+        try:
+            if not isinstance(pkt, MyPacket):
+                if dict(pkt).get("stop"):
+                    logger.debug(f"Received stop signal, training finished.-----------------------------------")
+                    self.info = {"finished": True}
+                    return [np.array(0), 0, False, self.info]
+        except AttributeError:
+            pass
+        
+        logger.debug(f"Received packet from true ip {pkt.true_source_ip}")
         # print("src_ip: ", pkt.src_ip)
         observation = [pkt.source_ip, self.time_delta]
         observation = np.array(observation)
-        info = {"finished": False}
+        self.info = {"finished": False}
 
         self.prev_pkt = pkt
-        return observation, reward, self.done, info
+        return observation, reward, self.done, self.info
 
     def reset(self):
         self.step_num = 0
         logger.debug("Reset")
 
         self.done = False
+        self.info = {"finished": False}
         self.total_reward = 0
 
         self.correct_pkts = 0
@@ -155,12 +167,12 @@ class DefendingAgent(gym.Env):
             logger.debug(f"time delta: {self.time_delta}")
         except ConnectionResetError as e:
             logger.debug("Attacker is done: {e}")
-            info = {"finished": True}
-            return [np.array(0)]
+            self.info = {"finished": True}
+            return np.array([0, 0])
         if not data:
             logger.debug("Attacker is done. No data.")
-            info = {"finished": True}
-            return [np.array(0)]
+            self.info = {"finished": True}
+            return np.array([0, 0])
 
         try:
             pkt = pickle.loads(data)
@@ -169,6 +181,15 @@ class DefendingAgent(gym.Env):
             exit(1)
 
         logger.debug("Got packet")
+
+        try:
+            if not isinstance(pkt, MyPacket):
+                if dict(pkt).get("stop"):
+                    logger.debug(f"Received stop signal, training finished.")
+                    self.info = {"finished": True}
+                    return np.array([0, 0])
+        except AttributeError:
+            pass
 
         observation = [pkt.source_ip, self.time_delta]
         observation = np.array(observation)

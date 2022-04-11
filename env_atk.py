@@ -15,9 +15,10 @@ from config import HOST, PORT, logger, INITIAL_RTT
 from bg_traffic import BackgroundTraffic
 
 N_DISCRETE_ACTIONS = 2
-N_DISCRETE_SPACES = 2
-PACKETS_PER_ITERATION = 15
+N_DISCRETE_SPACES = 1
+PACKETS_PER_ITERATION = 150
 MY_IP = 2
+DTYPE = np.float32
 
 
 class AttackingAgent(gym.Env):
@@ -27,10 +28,10 @@ class AttackingAgent(gym.Env):
         super(AttackingAgent, self).__init__()
         # self.action_space = spaces.Discrete(N_DISCRETE_ACTIONS)
         self.action_space = spaces.Box(
-            low=0, high=500, shape=(N_DISCRETE_ACTIONS,), dtype=np.float32
+            low=0, high=500, shape=(N_DISCRETE_ACTIONS,), dtype=DTYPE
         )
         self.observation_space = spaces.Box(
-            low=0, high=10, shape=(N_DISCRETE_SPACES,), dtype=np.float32
+            low=-1, high=1, shape=(N_DISCRETE_SPACES,), dtype=DTYPE
         )
 
         self.client_socket = socket.socket()
@@ -83,7 +84,8 @@ class AttackingAgent(gym.Env):
             )
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
-        reward = -1 * np.int32((recv_data.get("reward")))
+        # reward = -1 * np.int32((recv_data.get("reward")))
+        reward = -1 * np.int32(int(recv_data.get("reward")))
         logger.debug(f"got reward: {reward}")
 
         if reward > 0:
@@ -96,8 +98,9 @@ class AttackingAgent(gym.Env):
         else:
             self.done = False
 
-        observation = [reward, atk_packet.source_ip]
-        observation = np.array(observation, dtype=np.float32)
+        observation = [reward]
+        observation = np.array(observation, dtype=DTYPE)
+        logger.debug(f"Oberrvation: {observation}")
         info = {"finished": False}
 
         return observation, reward, self.done, info
@@ -133,8 +136,9 @@ class AttackingAgent(gym.Env):
 
         self.step_num += 1
         self.client_socket.settimeout(10)  # TODO need to change
-        observation = [reward, random_packet.source_ip]
-        observation = np.array(observation, dtype=np.float32)
+        observation = [reward]
+        observation = np.array(observation, dtype=DTYPE)
+        logger.debug(f"Oberrvation: {observation}")
         return observation
 
     def render(self):
@@ -144,6 +148,18 @@ class AttackingAgent(gym.Env):
         logger.debug("close")
         # self.client_socket.shutdown(socket.SHUT_RDWR)
         self.client_socket.close()
+
+    def send_finished_signal(self):
+        recv_data, self.training_finished = send_and_receive(
+            self.client_socket, 
+            {
+                "stop": True,
+                "true_source_ip": 2, 
+                "true_destination_ip": 1
+            }, 
+            self.rtt,
+            __name__,
+        )
 
 
 def getSampleAttackerPacket():
