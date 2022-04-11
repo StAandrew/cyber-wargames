@@ -26,7 +26,7 @@ start_time = time.time()
 
 env = AttackingAgent()
 custom_callback = CustomCallback()
-model = DQN("MlpPolicy", env, verbose=0, tensorboard_log=log_dir)
+model = DDPG("MlpPolicy", env, verbose=0, tensorboard_log=log_dir)
 
 logger.info("Starting training")
 for i in range(1, int(timesteps / save_every_timesteps) + 1):
@@ -42,24 +42,24 @@ for i in range(1, int(timesteps / save_every_timesteps) + 1):
 end_time = time.time()
 env.close()
 logger.info("Training done")
-logger.info(
-    f"Sleeping for {(MAX_RETRIES * INITIAL_RTT)} seconds before running benchmarks."
-)
-time.sleep(MAX_RETRIES * INITIAL_RTT)
+# logger.info(
+#     f"Sleeping for {(MAX_RETRIES * INITIAL_RTT)} seconds before running benchmarks."
+# )
+# time.sleep(MAX_RETRIES * INITIAL_RTT)
 
-logger.info("Running benchmarks")
-env = AttackingAgent()
-correct = 0
-total = 800
-for i in range(total):
-    obs = env.reset()
-    action, _verbose = model.predict(obs)
-    obs, reward, done, info = env.step(action)
-    print(f"obs: {obs}, action: {action}, reward: {reward}")
-    if reward == 1:
-        correct += 1
+# logger.info("Running benchmarks")
+# env = AttackingAgent()
+# correct = 0
+# total = 800
+# for i in range(total):
+#     obs = env.reset()
+#     action, _verbose = model.predict(obs)
+#     obs, reward, done, info = env.step(action)
+#     print(f"obs: {obs}, action: {action}, reward: {reward}")
+#     if reward == 1:
+#         correct += 1
 
-env.close()
-print(
-    f"timesteps: {timesteps}, correct {(100*correct/total):.2f}%, took {(end_time-start_time):.0f}s"
-)
+# env.close()
+# print(
+#     f"timesteps: {timesteps}, correct {(100*correct/total):.2f}%, took {(end_time-start_time):.0f}s"
+# )

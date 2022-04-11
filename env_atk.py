@@ -3,6 +3,7 @@ import random
 import socket
 import time
 import threading
+from math import floor
 
 import gym
 import numpy as np
@@ -24,9 +25,12 @@ class AttackingAgent(gym.Env):
 
     def __init__(self):
         super(AttackingAgent, self).__init__()
-        self.action_space = spaces.Discrete(N_DISCRETE_ACTIONS)
+        # self.action_space = spaces.Discrete(N_DISCRETE_ACTIONS)
+        self.action_space = spaces.Box(
+            low=0, high=500, shape=(N_DISCRETE_ACTIONS,), dtype=np.float32
+        )
         self.observation_space = spaces.Box(
-            low=-1, high=10, shape=(N_DISCRETE_SPACES,), dtype=np.float32
+            low=0, high=10, shape=(N_DISCRETE_SPACES,), dtype=np.float32
         )
 
         self.client_socket = socket.socket()
@@ -45,8 +49,16 @@ class AttackingAgent(gym.Env):
             info = {"finished": True}
             return [np.array([0, 0]), 0, False, info]
 
+        # logger.info(f"ACTION {action}")
+        logger.info(f"ACTION[0] {action[0]}")
+        logger.info(f"ACTION[1] {action[1]}")
+
         atk_packet = getSampleAttackerPacket()
-        atk_packet.source_ip = action
+        atk_packet.source_ip = floor(action[0])
+
+        to_sleep = action[1]/10000
+        time.sleep(to_sleep)
+        logger.info(f"to sleep: {to_sleep}")
 
         sent_time = time.time_ns()
         recv_data, self.episode_finished = send_and_receive(

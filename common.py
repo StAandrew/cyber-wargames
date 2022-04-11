@@ -74,8 +74,8 @@ def send_and_receive(socket, packet, rtt, source_file, max_attempts=MAX_RETRIES)
 
         # wait and receive response
         try:
-            if num < floor(MAX_RETRIES/2):
-                to_wait = rtt*num
+            if num < floor(MAX_RETRIES / 2):
+                to_wait = rtt * num
             else:
                 to_wait = (0.1 + rtt) * num
             logger.debug(f"timeout set to {to_wait}")

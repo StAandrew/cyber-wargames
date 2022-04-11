@@ -23,9 +23,9 @@ class DefendingAgent(gym.Env):
         super(DefendingAgent, self).__init__()
 
         self.action_space = spaces.Discrete(N_DISCRETE_ACTIONS)
-        # self.observation_space = spaces.Box(low=0, high=5,
-        #         shape=(N_CHANNELS,), dtype=np.float32)
-        self.observation_space = spaces.Discrete(5)
+        self.observation_space = spaces.Box(low=0, high=10,
+                shape=(N_CHANNELS,), dtype=np.float32)
+        # self.observation_space = spaces.Discrete(5)
 
         self.socket = socket.socket()
         self.socket.settimeout(10)
@@ -92,9 +92,12 @@ class DefendingAgent(gym.Env):
         self.total_reward += reward
         logger.debug("sent reward")
 
+        self.start_time = time.time()
         # receive new packet
         try:
             recv_data = self.socket.recv(PACKET_SIZE)
+            self.time_delta = time.time() - self.start_time
+            logger.debug(f"time delta: {self.time_delta}")
         except ConnectionResetError:
             logger.debug("Attacker is done")
             info = {"finished": True}
@@ -116,10 +119,9 @@ class DefendingAgent(gym.Env):
             logger.error(f"Unexpected exception when loading new packet: {e}")
 
         logger.debug("Received packet")
-        receive_time = time.time_ns()
 
         # print("src_ip: ", pkt.src_ip)
-        observation = [pkt.source_ip]
+        observation = [pkt.source_ip, self.time_delta]
         observation = np.array(observation)
         info = {"finished": False}
 
@@ -136,9 +138,12 @@ class DefendingAgent(gym.Env):
         self.correct_pkts = 0
         self.incorrect_pkts = 0
 
+        self.start_time = time.time()
         logger.debug("Waiting for packets")
         try:
             data = self.socket.recv(PACKET_SIZE)
+            self.time_delta = time.time() - self.start_time
+            logger.debug(f"time delta: {self.time_delta}")
         except ConnectionResetError as e:
             logger.debug("Attacker is done: {e}")
             info = {"finished": True}
@@ -156,7 +161,7 @@ class DefendingAgent(gym.Env):
 
         logger.debug("Got packet")
 
-        observation = [pkt.source_ip]
+        observation = [pkt.source_ip, self.time_delta]
         observation = np.array(observation)
 
         self.prev_pkt = pkt
