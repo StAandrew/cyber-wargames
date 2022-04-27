@@ -6,7 +6,9 @@
 
 #### About
 
-This is the main repository for the third-year Project on Network Security with Reinforcement Learning. It is a simulation of Denial-of-Service attack using two separate RL agents implemented with help of OpenAI Gym and Stable Baselines 3 libraries. 
+This is the main repository for the third-year Project on Network Security with Reinforcement Learning. It is a simulation of Denial-of-Service attack using two separate RL agents implemented with help of OpenAI Gym and Stable Baselines 3 libraries.   
+  
+Black linter was used with default settings and line width of 88 charactes  
 
 #### Installation
 

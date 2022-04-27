@@ -1,9 +1,14 @@
+"""Common
+
+Contains common functions.
+"""
 import random
 import pickle
-from socket import timeout
+from socket import socket, timeout
 from math import floor
 
 from config import timeout_multiplier, logger, MAX_RETRIES
+
 
 """
 size - packet size in bits
@@ -12,7 +17,7 @@ data - random data of packet
 """
 
 
-class MyPacket:
+class NetworkPacket:
     def __init__(
         self, size, source_ip, destination_ip, true_source_ip, true_destination_ip
     ):
@@ -48,7 +53,13 @@ class MyPacket:
 """
 
 
-def send_and_receive(socket, packet, rtt, source_file, max_attempts=MAX_RETRIES):
+def send_and_receive(
+    socket: socket,
+    packet: NetworkPacket,
+    rtt: float,
+    source_file: str,
+    max_attempts: int = MAX_RETRIES,
+) -> tuple[str, int]:
     recv_response = False
     episode_finished = False
     num = 0
@@ -62,7 +73,7 @@ def send_and_receive(socket, packet, rtt, source_file, max_attempts=MAX_RETRIES)
         # send the packet
         try:
             socket.send(pickle.dumps(packet))
-        except (BrokenPipeError, IOError) as e:
+        except (BrokenPipeError, IOError, InterruptedError) as e:
             logger.debug(f"  {source_file}: episode finished on send: {e}")
             episode_finished = True
             return "", episode_finished
@@ -83,7 +94,7 @@ def send_and_receive(socket, packet, rtt, source_file, max_attempts=MAX_RETRIES)
             recv_data = socket.recv(4096)
             recv_response = True
             logger.debug(f"  {source_file}: response received")
-        except (EOFError, BrokenPipeError) as e:
+        except (EOFError, BrokenPipeError, InterruptedError) as e:
             logger.debug(f"  {source_file}: episode finished on receive: {e}")
             episode_finished = True
             return recv_data, episode_finished

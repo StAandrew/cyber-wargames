@@ -1,3 +1,8 @@
+"""Cleanup
+
+This script deletes all files in log and model directories that 
+are specified in the config file.
+"""
 import os
 import pathlib
 import shutil

@@ -1,10 +1,14 @@
+"""Config
+
+Contains global configuration parameters.
+"""
 import logging
 import sys
 import socket
 
 
 HOST = socket.gethostname()
-PORT = 5433
+PORT = 5434
 
 PACKET_SIZE = 8196
 
@@ -24,8 +28,3 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-# file_handler = logging.FileHandler('logfile.log')
-# formatter    = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
-# file_handler.setFormatter(formatter)
-# logger.addHandler(file_handler)
