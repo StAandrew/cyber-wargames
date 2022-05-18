@@ -16,13 +16,13 @@ Black linter was used with default settings and line width of 88 charactes
 
 2. Install the libraries from requirements.txt e.g. `pip install -r requirements.txt`
 
-## How to use:
+## How to train the agents:
 
 To run, run the following in separate terminals and in this order: 
 1. `tensorboard --logdir=logs`
 2. `python3 router.py`
-3. `python3 play_def.py` 
-4. `python3 play_atk.py`
+3. `python3 train_def.py` 
+4. `python3 train_atk.py`
 
 
 ## FAQ and Debug
